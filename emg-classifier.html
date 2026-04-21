@@ -1,0 +1,1890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>EMG Classifier · NinaPro DB5</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;500;600;700;800;900&family=JetBrains+Mono:ital,wght@0,200;0,300;0,400;0,500;0,700;1,300&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+/* ══════════════════════════════════════════════════════════
+   TOKENS
+══════════════════════════════════════════════════════════ */
+:root {
+  --bg:       #05070f;
+  --bg1:      #080b16;
+  --bg2:      #0c1020;
+  --bg3:      #111828;
+  --border:   rgba(255,255,255,.055);
+  --border2:  rgba(255,255,255,.10);
+  --c1:       #3b82f6;   /* electric blue */
+  --c2:       #8b5cf6;   /* violet */
+  --c3:       #06d6a0;   /* mint */
+  --c4:       #f59e0b;   /* amber */
+  --c5:       #ef4444;   /* red */
+  --c1g:      linear-gradient(135deg,#3b82f6,#8b5cf6);
+  --c2g:      linear-gradient(135deg,#06d6a0,#3b82f6);
+  --text:     #f0f4ff;
+  --text2:    #7e8fb5;
+  --text3:    #3a4566;
+  --mono:     'JetBrains Mono',monospace;
+  --sans:     'Outfit',sans-serif;
+  --ease:     cubic-bezier(.16,1,.3,1);
+}
+
+*, *::before, *::after { box-sizing:border-box; margin:0; padding:0 }
+html { scroll-behavior:smooth }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.6;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── ANIMATED BACKGROUND ── */
+.bg-orbs {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: .12;
+  animation: orbFloat linear infinite;
+}
+.orb1 { width:600px;height:600px;background:#3b82f6;top:-200px;left:-100px;animation-duration:25s }
+.orb2 { width:500px;height:500px;background:#8b5cf6;bottom:-150px;right:-100px;animation-duration:30s;animation-delay:-10s }
+.orb3 { width:400px;height:400px;background:#06d6a0;top:40%;left:60%;animation-duration:20s;animation-delay:-5s }
+@keyframes orbFloat {
+  0%,100% { transform:translate(0,0) scale(1) }
+  25%      { transform:translate(30px,-40px) scale(1.05) }
+  50%      { transform:translate(-20px,30px) scale(.95) }
+  75%      { transform:translate(40px,10px) scale(1.02) }
+}
+
+/* grid overlay */
+body::before {
+  content:'';
+  position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:
+    linear-gradient(rgba(59,130,246,.03) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(59,130,246,.03) 1px,transparent 1px);
+  background-size:48px 48px;
+  mask-image:radial-gradient(ellipse 80% 80% at 50% 50%,#000 40%,transparent 100%);
+}
+
+/* ══════════════════════════════════════════════════════════
+   LAYOUT
+══════════════════════════════════════════════════════════ */
+.shell {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  grid-template-rows: 64px 1fr;
+  min-height: 100vh;
+  position: relative;
+  z-index: 1;
+}
+
+/* ══════════════════════════════════════════════════════════
+   TOPBAR
+══════════════════════════════════════════════════════════ */
+.topbar {
+  grid-column: 1/-1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(5,7,15,.85);
+  backdrop-filter: blur(20px) saturate(180%);
+  position: sticky;
+  top: 0;
+  z-index: 200;
+}
+
+.topbar-left { display:flex;align-items:center;gap:20px }
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.logo-mark {
+  width: 36px;
+  height: 36px;
+  background: var(--c1g);
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 0 20px rgba(59,130,246,.4);
+}
+.logo-mark svg { width:18px;height:18px }
+.logo-name {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+}
+.logo-name span { background:var(--c1g);-webkit-background-clip:text;-webkit-text-fill-color:transparent }
+
+.topbar-divider { width:1px;height:28px;background:var(--border) }
+
+.page-crumb {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  letter-spacing: .06em;
+}
+.page-crumb span { color:var(--c1) }
+
+.topbar-right { display:flex;align-items:center;gap:12px }
+
+.api-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: rgba(255,255,255,.04);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text2);
+  transition: all .2s;
+}
+.api-pill:hover { border-color:var(--border2) }
+.status-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--text3);
+  transition: all .3s;
+  flex-shrink: 0;
+}
+.status-dot.live {
+  background: var(--c3);
+  box-shadow: 0 0 8px var(--c3);
+  animation: blink 2s ease-in-out infinite;
+}
+.status-dot.error { background:var(--c5);box-shadow:0 0 8px var(--c5) }
+@keyframes blink { 0%,100%{opacity:1}50%{opacity:.4} }
+
+/* ══════════════════════════════════════════════════════════
+   SIDEBAR
+══════════════════════════════════════════════════════════ */
+.sidebar {
+  background: rgba(8,11,22,.6);
+  backdrop-filter: blur(20px);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 64px;
+  height: calc(100vh - 64px);
+  overflow-y: auto;
+  padding: 20px 0;
+}
+
+.sb-section { margin-bottom: 4px }
+.sb-section-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--text3);
+  padding: 10px 22px 6px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 22px;
+  cursor: pointer;
+  color: var(--text2);
+  font-size: 13px;
+  font-weight: 500;
+  border-left: 2px solid transparent;
+  transition: all .15s;
+  user-select: none;
+  position: relative;
+}
+.nav-item:hover { color:var(--text);background:rgba(255,255,255,.03) }
+.nav-item.active {
+  color: var(--text);
+  border-left-color: var(--c1);
+  background: linear-gradient(90deg,rgba(59,130,246,.08),transparent);
+}
+.nav-item svg { width:15px;height:15px;flex-shrink:0 }
+.nav-badge {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 9px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(59,130,246,.12);
+  color: var(--c1);
+}
+
+.sb-bottom {
+  margin-top: auto;
+  padding: 16px 22px;
+  border-top: 1px solid var(--border);
+}
+.sb-stats-mini { display:grid;grid-template-columns:1fr 1fr;gap:8px }
+.ssm {
+  padding: 10px;
+  background: rgba(255,255,255,.03);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  text-align: center;
+}
+.ssm-val { font-family:var(--mono);font-size:13px;font-weight:500;color:var(--text) }
+.ssm-label { font-family:var(--mono);font-size:9px;color:var(--text3);margin-top:2px;text-transform:uppercase;letter-spacing:.08em }
+
+/* ══════════════════════════════════════════════════════════
+   MAIN
+══════════════════════════════════════════════════════════ */
+.main {
+  overflow-y: auto;
+  max-height: calc(100vh - 64px);
+}
+
+/* ══════════════════════════════════════════════════════════
+   PAGES
+══════════════════════════════════════════════════════════ */
+.page { display:none;padding:32px 36px;animation:fadeUp .3s var(--ease) }
+.page.active { display:block }
+@keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:none} }
+
+/* ══════════════════════════════════════════════════════════
+   HERO SECTION (Overview top)
+══════════════════════════════════════════════════════════ */
+.hero {
+  background: linear-gradient(135deg,rgba(59,130,246,.07),rgba(139,92,246,.07));
+  border: 1px solid rgba(59,130,246,.15);
+  border-radius: 24px;
+  padding: 32px 36px;
+  margin-bottom: 28px;
+  position: relative;
+  overflow: hidden;
+}
+.hero::before {
+  content:'';
+  position:absolute;top:0;left:0;right:0;height:1px;
+  background: linear-gradient(90deg,transparent,var(--c1),var(--c2),transparent);
+}
+.hero-inner { display:flex;align-items:center;justify-content:space-between;gap:20px }
+.hero-text {}
+.hero-title {
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -.03em;
+  line-height: 1.1;
+  margin-bottom: 10px;
+}
+.hero-title .grad {
+  background: var(--c1g);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.hero-desc {
+  font-size: 14px;
+  color: var(--text2);
+  max-width: 480px;
+  line-height: 1.7;
+}
+.hero-meta {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+.hmeta {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  background: rgba(255,255,255,.05);
+  border: 1px solid var(--border);
+  color: var(--text2);
+}
+.hmeta.hl { border-color:rgba(59,130,246,.3);color:var(--c1);background:rgba(59,130,246,.06) }
+
+/* EMG waveform animation */
+.hero-wave {
+  flex-shrink: 0;
+  width: 260px;
+  height: 80px;
+  position: relative;
+}
+.hero-wave canvas { width:100%;height:100% }
+
+/* ══════════════════════════════════════════════════════════
+   API CONNECT PANEL
+══════════════════════════════════════════════════════════ */
+.connect-panel {
+  background: rgba(255,255,255,.02);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 22px 26px;
+  margin-bottom: 28px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.connect-icon {
+  width: 44px;height:44px;
+  background: linear-gradient(135deg,rgba(59,130,246,.15),rgba(139,92,246,.15));
+  border: 1px solid rgba(59,130,246,.2);
+  border-radius: 12px;
+  display:grid;place-items:center;flex-shrink:0;
+}
+.connect-icon svg { width:20px;height:20px;color:var(--c1) }
+.connect-body { flex:1 }
+.connect-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.connect-row { display:flex;gap:10px }
+.connect-input {
+  flex: 1;
+  background: rgba(0,0,0,.3);
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  outline: none;
+  transition: border-color .2s,box-shadow .2s;
+}
+.connect-input:focus {
+  border-color: var(--c1);
+  box-shadow: 0 0 0 3px rgba(59,130,246,.12);
+}
+.connect-input::placeholder { color:var(--text3) }
+.btn-connect {
+  padding: 10px 22px;
+  background: var(--c1g);
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .2s;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(59,130,246,.3);
+}
+.btn-connect:hover { filter:brightness(1.1);transform:translateY(-1px);box-shadow:0 6px 20px rgba(59,130,246,.4) }
+.btn-connect:active { transform:none }
+
+/* ══════════════════════════════════════════════════════════
+   STAT CARDS
+══════════════════════════════════════════════════════════ */
+.stats-grid { display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:28px }
+.stat-card {
+  background: rgba(255,255,255,.025);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 22px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color .2s,transform .2s;
+  cursor: default;
+}
+.stat-card:hover { border-color:var(--border2);transform:translateY(-2px) }
+.stat-card::after {
+  content:'';
+  position:absolute;top:0;left:0;right:0;height:2px;
+  background: var(--sc-grad, var(--c1g));
+  opacity:.8;
+}
+.stat-card-inner { position:relative;z-index:1 }
+.sc-icon {
+  width:36px;height:36px;border-radius:10px;
+  display:grid;place-items:center;margin-bottom:14px;
+}
+.sc-icon svg { width:18px;height:18px }
+.sc-val {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -.03em;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.sc-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--text3);
+  margin-bottom: 6px;
+}
+.sc-sub { font-size:11px;color:var(--text2);font-weight:500 }
+/* bg glow per card */
+.stat-card::before {
+  content:'';
+  position:absolute;bottom:-30px;right:-30px;
+  width:100px;height:100px;
+  border-radius:50%;
+  filter:blur(30px);
+  opacity:.12;
+  background: var(--sc-glow,var(--c1));
+}
+
+/* ══════════════════════════════════════════════════════════
+   FILTER BAR
+══════════════════════════════════════════════════════════ */
+.filter-bar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 24px;
+  background: rgba(255,255,255,.025);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 5px;
+  width: fit-content;
+}
+.filter-btn {
+  padding: 7px 18px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text2);
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .15s;
+}
+.filter-btn:hover { color:var(--text);background:rgba(255,255,255,.04) }
+.filter-btn.active {
+  background: var(--c1g);
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(59,130,246,.3);
+}
+
+/* ══════════════════════════════════════════════════════════
+   CARDS
+══════════════════════════════════════════════════════════ */
+.card {
+  background: rgba(255,255,255,.025);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 24px 26px;
+  transition: border-color .2s;
+}
+.card:hover { border-color:var(--border2) }
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+.card-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.card-title-icon {
+  width: 28px;height:28px;
+  border-radius: 8px;
+  display:grid;place-items:center;
+}
+.card-title-icon svg { width:14px;height:14px }
+.card-sub {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+}
+
+.g2 { display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px }
+.g3 { display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:20px }
+
+.chart-box { position:relative;height:240px }
+.chart-box-sm { position:relative;height:200px }
+
+/* ══════════════════════════════════════════════════════════
+   TABLE
+══════════════════════════════════════════════════════════ */
+.data-table { width:100%;border-collapse:collapse }
+.data-table thead th {
+  font-family: var(--mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--text3);
+  padding: 10px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.data-table tbody tr {
+  transition: background .12s;
+}
+.data-table tbody tr:hover { background:rgba(255,255,255,.025) }
+.data-table tbody td {
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255,255,255,.025);
+  font-size: 13px;
+  vertical-align: middle;
+}
+.data-table tbody tr:last-child td { border-bottom:none }
+
+.td-mono { font-family:var(--mono);font-size:11px;color:var(--text2) }
+
+.type-pill {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 5px;
+  letter-spacing: .04em;
+}
+.type-dl { background:rgba(59,130,246,.12);color:var(--c1);border:1px solid rgba(59,130,246,.2) }
+.type-ml { background:rgba(139,92,246,.12);color:var(--c2);border:1px solid rgba(139,92,246,.2) }
+
+.acc-bar-wrap { display:flex;align-items:center;gap:10px }
+.acc-track {
+  flex:1;height:5px;
+  background: rgba(255,255,255,.06);
+  border-radius: 3px;
+  overflow:hidden;
+}
+.acc-fill {
+  height:100%;border-radius:3px;
+  background: var(--c1g);
+  transition: width .8s var(--ease);
+}
+.acc-num { font-family:var(--mono);font-size:11px;color:var(--text);min-width:42px;text-align:right }
+
+.best-row td:first-child { color:var(--c1) }
+.best-badge {
+  display:inline-block;
+  font-family:var(--mono);font-size:8px;
+  padding:2px 6px;border-radius:4px;
+  background:rgba(59,130,246,.15);color:var(--c1);
+  margin-left:6px;border:1px solid rgba(59,130,246,.25);
+}
+
+/* ══════════════════════════════════════════════════════════
+   CONFUSION MATRIX
+══════════════════════════════════════════════════════════ */
+.cm-container { overflow-x:auto;padding-bottom:4px }
+.cm-table { border-collapse:collapse;font-family:var(--mono) }
+.cm-table th {
+  font-size:9px;color:var(--c1);padding:6px 8px;
+  text-align:center;letter-spacing:.04em;font-weight:400;
+}
+.cm-table td { padding:2px }
+.cm-row-label {
+  font-size:9px;color:var(--c2);text-align:right;
+  padding-right:8px;white-space:nowrap;
+}
+.cm-cell {
+  width:40px;height:32px;border-radius:6px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;transition:transform .15s,box-shadow .15s;cursor:default;
+}
+.cm-cell:hover { transform:scale(1.2);z-index:10;position:relative;box-shadow:0 4px 12px rgba(0,0,0,.5) }
+
+/* ══════════════════════════════════════════════════════════
+   FEATURE IMPORTANCE
+══════════════════════════════════════════════════════════ */
+.fi-item { display:flex;align-items:center;gap:12px;margin-bottom:12px }
+.fi-rank {
+  font-family:var(--mono);font-size:10px;color:var(--text3);
+  width:18px;text-align:center;flex-shrink:0;
+}
+.fi-name {
+  font-size:12px;font-weight:500;color:var(--text2);
+  width:220px;flex-shrink:0;
+}
+.fi-track {
+  flex:1;height:8px;background:rgba(255,255,255,.05);
+  border-radius:4px;overflow:hidden;
+}
+.fi-fill {
+  height:100%;border-radius:4px;
+  transition:width 1.2s var(--ease);
+}
+.fi-pct { font-family:var(--mono);font-size:10px;color:var(--text3);min-width:38px;text-align:right }
+
+/* ══════════════════════════════════════════════════════════
+   PREDICT PAGE
+══════════════════════════════════════════════════════════ */
+.predict-layout { display:grid;grid-template-columns:1fr 1fr;gap:24px }
+
+.input-label {
+  font-family:var(--mono);font-size:9px;text-transform:uppercase;
+  letter-spacing:.12em;color:var(--text3);margin-bottom:8px;
+}
+.emg-ta {
+  width:100%;min-height:190px;resize:vertical;
+  background:rgba(0,0,0,.35);
+  border:1px solid var(--border2);
+  border-radius:12px;
+  padding:14px 16px;
+  font-family:var(--mono);font-size:11px;
+  color:var(--text2);outline:none;
+  transition:border-color .2s,box-shadow .2s;
+  line-height:1.7;
+}
+.emg-ta:focus {
+  border-color:var(--c1);
+  box-shadow:0 0 0 3px rgba(59,130,246,.1);
+}
+.emg-ta::placeholder { color:var(--text3) }
+
+.btn-predict {
+  width:100%;margin-top:14px;padding:14px;
+  background: var(--c1g);
+  border:none;border-radius:12px;
+  color:#fff;font-family:var(--sans);font-size:15px;font-weight:700;
+  cursor:pointer;transition:all .2s;
+  letter-spacing:-.01em;
+  box-shadow:0 4px 20px rgba(59,130,246,.3);
+  position:relative;overflow:hidden;
+}
+.btn-predict::after {
+  content:'';
+  position:absolute;inset:0;
+  background:linear-gradient(135deg,rgba(255,255,255,.1),transparent);
+  opacity:0;transition:opacity .2s;
+}
+.btn-predict:hover { transform:translateY(-2px);box-shadow:0 8px 28px rgba(59,130,246,.45) }
+.btn-predict:hover::after { opacity:1 }
+.btn-predict:active { transform:none }
+.btn-predict:disabled { opacity:.35;cursor:not-allowed;transform:none;box-shadow:none }
+
+/* result panel */
+.result-box {
+  min-height:320px;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  text-align:center;
+  position:relative;
+  overflow:hidden;
+}
+.result-idle {
+  font-family:var(--mono);font-size:12px;color:var(--text3);
+}
+.result-idle-icon { font-size:48px;margin-bottom:12px;opacity:.25 }
+
+.result-gesture-wrap {
+  position:relative;z-index:1;
+  animation:resultIn .5s var(--ease);
+}
+@keyframes resultIn { from{opacity:0;transform:scale(.8)} to{opacity:1;transform:none} }
+
+.result-icon { font-size:72px;line-height:1;margin-bottom:14px;
+  filter:drop-shadow(0 0 24px rgba(59,130,246,.4)) }
+.result-name {
+  font-size: 36px;
+  font-weight: 800;
+  letter-spacing: -.03em;
+  background: var(--c1g);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  line-height:1;margin-bottom:8px;
+}
+.result-conf {
+  font-family:var(--mono);font-size:13px;
+  color:var(--c3);margin-bottom:10px;
+}
+.conf-badge {
+  display:inline-block;padding:4px 14px;border-radius:20px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.06em;
+  margin-bottom:18px;
+}
+.cb-high { background:rgba(6,214,160,.1);color:var(--c3);border:1px solid rgba(6,214,160,.25) }
+.cb-mid  { background:rgba(245,158,11,.1);color:var(--c4);border:1px solid rgba(245,158,11,.25) }
+.cb-low  { background:rgba(239,68,68,.1);color:var(--c5);border:1px solid rgba(239,68,68,.25) }
+
+.prob-grid { width:100%;border-top:1px solid var(--border);padding-top:16px }
+.prob-row { display:flex;align-items:center;gap:10px;margin-bottom:8px }
+.prob-name { font-family:var(--mono);font-size:10px;color:var(--text2);width:130px;flex-shrink:0;text-align:left }
+.prob-track { flex:1;height:4px;background:rgba(255,255,255,.06);border-radius:2px }
+.prob-fill { height:100%;border-radius:2px;transition:width .6s var(--ease) }
+.prob-pct { font-family:var(--mono);font-size:10px;color:var(--text3);min-width:36px;text-align:right }
+
+/* result bg glow */
+.result-glow {
+  position:absolute;width:200px;height:200px;
+  border-radius:50%;filter:blur(60px);opacity:.08;
+  background:var(--c1g);
+  animation:glowPulse 2s ease-in-out infinite;
+}
+@keyframes glowPulse { 0%,100%{transform:scale(1)}50%{transform:scale(1.2)} }
+
+/* ══════════════════════════════════════════════════════════
+   API INFO CARD
+══════════════════════════════════════════════════════════ */
+.api-info {
+  margin-top:16px;
+  background:rgba(0,0,0,.3);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:14px 16px;
+}
+.api-endpoint {
+  font-family:var(--mono);font-size:11px;
+  display:flex;align-items:center;gap:8px;margin-bottom:6px;
+}
+.ep-method {
+  font-size:9px;padding:2px 7px;border-radius:4px;
+  font-weight:600;letter-spacing:.06em;
+}
+.ep-post { background:rgba(6,214,160,.12);color:var(--c3) }
+.ep-get  { background:rgba(59,130,246,.12);color:var(--c1) }
+.ep-url  { color:var(--text2) }
+
+/* ══════════════════════════════════════════════════════════
+   NOTEBOOK
+══════════════════════════════════════════════════════════ */
+.nb-cells { display:flex;flex-direction:column;gap:12px }
+
+.nb-cell { border-radius:14px;overflow:hidden;border:1px solid var(--border);transition:border-color .2s }
+.nb-cell:hover { border-color:var(--border2) }
+
+.nb-md-cell {
+  padding:18px 22px;
+  background:rgba(255,255,255,.02);
+  font-size:13px;line-height:1.8;color:var(--text2);
+}
+.nb-md-cell h1 { font-size:26px;font-weight:800;color:var(--text);letter-spacing:-.02em;margin-bottom:10px }
+.nb-md-cell h2 { font-size:19px;font-weight:700;color:var(--text);margin:14px 0 8px }
+.nb-md-cell h3 { font-size:14px;font-weight:600;color:var(--c1);margin:10px 0 6px }
+.nb-md-cell code {
+  font-family:var(--mono);font-size:11px;
+  padding:2px 7px;border-radius:5px;
+  background:rgba(59,130,246,.1);color:var(--c1);
+}
+.nb-md-cell strong { color:var(--text);font-weight:600 }
+.nb-md-cell hr { border:none;border-top:1px solid var(--border);margin:12px 0 }
+.nb-md-cell table { width:100%;border-collapse:collapse;margin:10px 0;font-size:12px }
+.nb-md-cell th {
+  font-family:var(--mono);font-size:9px;padding:7px 12px;
+  border-bottom:1px solid var(--border2);color:var(--text3);
+  text-align:left;text-transform:uppercase;letter-spacing:.08em;
+}
+.nb-md-cell td {
+  padding:7px 12px;border-bottom:1px solid rgba(255,255,255,.03);
+  font-family:var(--mono);font-size:11px;color:var(--text2);
+}
+
+.nb-code-header {
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 16px;
+  background:rgba(0,0,0,.3);
+  border-bottom:1px solid var(--border);
+  cursor:pointer;
+  user-select:none;
+}
+.nb-code-header:hover { background:rgba(255,255,255,.03) }
+.nb-in-label {
+  font-family:var(--mono);font-size:10px;
+  display:flex;align-items:center;gap:8px;
+}
+.in-num {
+  padding:2px 7px;border-radius:5px;
+  background:rgba(139,92,246,.15);color:var(--c2);
+  font-size:9px;
+}
+.nb-toggle { font-family:var(--mono);font-size:10px;color:var(--text3) }
+
+.nb-code-body {
+  background:#050810;
+  padding:16px 20px;
+  overflow-x:auto;
+  font-family:var(--mono);
+  font-size:12px;
+  line-height:1.75;
+  color:#a8b8d8;
+}
+.nb-output {
+  background:rgba(0,0,0,.5);
+  border-top:1px solid var(--border);
+  padding:10px 20px;
+  font-family:var(--mono);
+  font-size:11px;
+  color:var(--c3);
+  white-space:pre-wrap;
+  max-height:180px;
+  overflow-y:auto;
+  line-height:1.7;
+}
+
+/* syntax */
+.kw  { color:#c792ea }
+.fn  { color:#82aaff }
+.str { color:#c3e88d }
+.cm  { color:#4a5978;font-style:italic }
+.nm  { color:#f78c6c }
+.cl  { color:#ffcb6b }
+.op  { color:#89ddff }
+
+/* ══════════════════════════════════════════════════════════
+   LOADING / ERROR
+══════════════════════════════════════════════════════════ */
+.loading-box {
+  display:flex;align-items:center;justify-content:center;
+  height:200px;flex-direction:column;gap:14px;
+}
+.loader {
+  width:32px;height:32px;
+  border:2px solid rgba(255,255,255,.08);
+  border-top-color:var(--c1);
+  border-radius:50%;
+  animation:spin .7s linear infinite;
+}
+@keyframes spin { to{transform:rotate(360deg)} }
+.loading-txt { font-family:var(--mono);font-size:11px;color:var(--text3) }
+
+.err-banner {
+  background:rgba(239,68,68,.06);
+  border:1px solid rgba(239,68,68,.2);
+  border-radius:12px;padding:12px 18px;
+  font-family:var(--mono);font-size:11px;color:var(--c5);
+  margin-bottom:18px;display:none;
+  line-height:1.6;
+}
+
+/* ══════════════════════════════════════════════════════════
+   SECTION HEADER
+══════════════════════════════════════════════════════════ */
+.sec-hd { margin-bottom:28px }
+.sec-title { font-size:28px;font-weight:800;letter-spacing:-.03em;line-height:1;margin-bottom:6px }
+.sec-sub { font-family:var(--mono);font-size:11px;color:var(--text3);letter-spacing:.04em }
+
+/* ══════════════════════════════════════════════════════════
+   PIPELINE STRIP
+══════════════════════════════════════════════════════════ */
+.pipeline {
+  display:flex;align-items:center;gap:0;
+  background:rgba(255,255,255,.02);
+  border:1px solid var(--border);
+  border-radius:12px;padding:14px 20px;
+  margin-bottom:24px;
+  overflow-x:auto;flex-wrap:nowrap;
+}
+.pip-step {
+  display:flex;align-items:center;gap:6px;
+  font-family:var(--mono);font-size:10px;
+  padding:6px 12px;
+  background:rgba(255,255,255,.03);
+  border:1px solid var(--border);
+  border-radius:7px;
+  white-space:nowrap;color:var(--text2);
+  flex-shrink:0;
+}
+.pip-step.hi { border-color:rgba(59,130,246,.25);color:var(--c1);background:rgba(59,130,246,.06) }
+.pip-arr { font-size:14px;color:var(--text3);padding:0 6px;flex-shrink:0 }
+
+/* ══════════════════════════════════════════════════════════
+   SCROLLBAR
+══════════════════════════════════════════════════════════ */
+::-webkit-scrollbar { width:5px;height:5px }
+::-webkit-scrollbar-track { background:transparent }
+::-webkit-scrollbar-thumb { background:rgba(255,255,255,.08);border-radius:3px }
+::-webkit-scrollbar-thumb:hover { background:rgba(255,255,255,.15) }
+
+/* ══════════════════════════════════════════════════════════
+   RESPONSIVE
+══════════════════════════════════════════════════════════ */
+@media(max-width:960px){
+  .shell{grid-template-columns:1fr;grid-template-rows:64px 1fr}
+  .sidebar{display:none}
+  .stats-grid{grid-template-columns:1fr 1fr}
+  .g2,.predict-layout{grid-template-columns:1fr}
+  .g3{grid-template-columns:1fr 1fr}
+  .hero-wave{display:none}
+  .hero-inner{flex-direction:column}
+}
+</style>
+</head>
+<body>
+
+<div class="bg-orbs">
+  <div class="orb orb1"></div>
+  <div class="orb orb2"></div>
+  <div class="orb orb3"></div>
+</div>
+
+<div class="shell">
+
+<!-- ══════════ TOPBAR ══════════ -->
+<header class="topbar">
+  <div class="topbar-left">
+    <div class="logo">
+      <div class="logo-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+        </svg>
+      </div>
+      <div class="logo-name">EMG<span>Classifier</span></div>
+    </div>
+    <div class="topbar-divider"></div>
+    <div class="page-crumb" id="crumb"><span>Overview</span></div>
+  </div>
+  <div class="topbar-right">
+    <div class="api-pill">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">Not connected</span>
+    </div>
+  </div>
+</header>
+
+<!-- ══════════ SIDEBAR ══════════ -->
+<aside class="sidebar">
+
+  <div class="sb-section">
+    <div class="sb-section-label">Dashboard</div>
+    <div class="nav-item active" data-page="overview">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1" stroke-width="1.8"/><rect x="14" y="3" width="7" height="7" rx="1" stroke-width="1.8"/><rect x="3" y="14" width="7" height="7" rx="1" stroke-width="1.8"/><rect x="14" y="14" width="7" height="7" rx="1" stroke-width="1.8"/></svg>
+      Overview
+      <span class="nav-badge">7 models</span>
+    </div>
+    <div class="nav-item" data-page="analysis">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+      Analysis
+      <span class="nav-badge">CM + FI</span>
+    </div>
+  </div>
+
+  <div class="sb-section">
+    <div class="sb-section-label">Inference</div>
+    <div class="nav-item" data-page="predict">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+      Live Predict
+    </div>
+  </div>
+
+  <div class="sb-section">
+    <div class="sb-section-label">Source</div>
+    <div class="nav-item" data-page="notebook">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+      Notebook
+    </div>
+  </div>
+
+  <div class="sb-bottom">
+    <div class="sb-section-label" style="padding:0 0 10px">Dataset</div>
+    <div class="sb-stats-mini">
+      <div class="ssm"><div class="ssm-val">16ch</div><div class="ssm-label">EMG</div></div>
+      <div class="ssm"><div class="ssm-val">200Hz</div><div class="ssm-label">Rate</div></div>
+      <div class="ssm"><div class="ssm-val">192</div><div class="ssm-label">Features</div></div>
+      <div class="ssm"><div class="ssm-val">10-K</div><div class="ssm-label">CV Folds</div></div>
+    </div>
+  </div>
+</aside>
+
+<!-- ══════════════════════════════════════════════
+     MAIN
+══════════════════════════════════════════════ -->
+<main class="main">
+
+<!-- ═══ OVERVIEW ═══ -->
+<div class="page active" id="page-overview">
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-inner">
+      <div class="hero-text">
+        <div class="hero-title">Surface EMG<br><span class="grad">Gesture Recognition</span></div>
+        <div class="hero-desc">Comparative study of classical ML vs deep learning on NinaPro Database 5 · Subject 1. 7 models, 3 exercise sets, 10-fold cross-validation.</div>
+        <div class="hero-meta">
+          <div class="hmeta hl">NinaPro DB5</div>
+          <div class="hmeta">SVM · RF · KNN · LDA</div>
+          <div class="hmeta">CNN · LSTM · CNN-LSTM</div>
+          <div class="hmeta">Step=25 · 87.5% overlap</div>
+        </div>
+      </div>
+      <div class="hero-wave">
+        <canvas id="heroWave"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Load Panel -->
+  <div class="connect-panel" id="loadPanel">
+    <div class="connect-icon">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/></svg>
+    </div>
+    <div class="connect-body">
+      <div class="connect-label">Load <code style="font-family:var(--mono);font-size:12px;background:rgba(59,130,246,.1);padding:2px 7px;border-radius:5px;color:var(--c1)">emg_export.json</code> — no server needed, works offline forever</div>
+      <div class="connect-row">
+        <input type="file" id="fileInput" accept=".json" style="display:none"/>
+        <button class="btn-connect" id="btnLoadFile" onclick="document.getElementById('fileInput').click()">
+          📂 Choose emg_export.json
+        </button>
+        <div style="display:flex;align-items:center;gap:8px;padding:0 10px;font-family:var(--mono);font-size:11px;color:var(--text3)">— or —</div>
+        <input class="connect-input" id="apiUrlInput" placeholder="ngrok URL (optional, predict-only)" autocomplete="off" spellcheck="false" style="max-width:340px"/>
+        <button class="btn-connect" id="btnConnect" style="background:rgba(255,255,255,.07);border:1px solid var(--border2);color:var(--text2);box-shadow:none">Connect API</button>
+      </div>
+      <div style="margin-top:10px;font-family:var(--mono);font-size:10px;color:var(--text3);line-height:1.8">
+        <span style="color:var(--c3)">●</span> <strong style="color:var(--text2)">JSON file</strong> → dashboard, charts, CM, notebook — instant, offline, permanent &nbsp;|&nbsp;
+        <span style="color:var(--c4)">●</span> <strong style="color:var(--text2)">ngrok URL</strong> → only needed for Live Predict with real EMG sensor data
+      </div>
+    </div>
+  </div>
+
+  <div class="err-banner" id="errOverview"></div>
+
+  <!-- Stats -->
+  <div class="stats-grid">
+    <div class="stat-card" style="--sc-grad:linear-gradient(90deg,#3b82f6,#8b5cf6);--sc-glow:#3b82f6">
+      <div class="stat-card-inner">
+        <div class="sc-icon" style="background:rgba(59,130,246,.12)">
+          <svg fill="none" stroke="#3b82f6" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        </div>
+        <div class="sc-label">Best Accuracy</div>
+        <div class="sc-val" id="sc1Val" style="color:#3b82f6">—</div>
+        <div class="sc-sub" id="sc1Sub">Awaiting data</div>
+      </div>
+    </div>
+    <div class="stat-card" style="--sc-grad:linear-gradient(90deg,#8b5cf6,#ec4899);--sc-glow:#8b5cf6">
+      <div class="stat-card-inner">
+        <div class="sc-icon" style="background:rgba(139,92,246,.12)">
+          <svg fill="none" stroke="#8b5cf6" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"/></svg>
+        </div>
+        <div class="sc-label">Best F1 Score</div>
+        <div class="sc-val" id="sc2Val" style="color:#8b5cf6">—</div>
+        <div class="sc-sub" id="sc2Sub">Awaiting data</div>
+      </div>
+    </div>
+    <div class="stat-card" style="--sc-grad:linear-gradient(90deg,#06d6a0,#3b82f6);--sc-glow:#06d6a0">
+      <div class="stat-card-inner">
+        <div class="sc-icon" style="background:rgba(6,214,160,.12)">
+          <svg fill="none" stroke="#06d6a0" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        </div>
+        <div class="sc-label">Best Deep Learning</div>
+        <div class="sc-val" id="sc3Val" style="color:#06d6a0">—</div>
+        <div class="sc-sub" id="sc3Sub">Awaiting data</div>
+      </div>
+    </div>
+    <div class="stat-card" style="--sc-grad:linear-gradient(90deg,#f59e0b,#ef4444);--sc-glow:#f59e0b">
+      <div class="stat-card-inner">
+        <div class="sc-icon" style="background:rgba(245,158,11,.12)">
+          <svg fill="none" stroke="#f59e0b" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+        </div>
+        <div class="sc-label">Best Classical ML</div>
+        <div class="sc-val" id="sc4Val" style="color:#f59e0b">—</div>
+        <div class="sc-sub" id="sc4Sub">Awaiting data</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filter -->
+  <div class="filter-bar" id="exFilter">
+    <button class="filter-btn active" data-ex="All">All Exercises</button>
+    <button class="filter-btn" data-ex="E1">E1 · 12 Gestures</button>
+    <button class="filter-btn" data-ex="E2">E2 · 17 Gestures</button>
+    <button class="filter-btn" data-ex="E3">E3 · 23 Gestures</button>
+  </div>
+
+  <!-- Charts -->
+  <div class="g2">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <div class="card-title-icon" style="background:rgba(59,130,246,.1)">
+            <svg fill="none" stroke="#3b82f6" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          </div>
+          Accuracy &amp; F1 Score
+        </div>
+        <div class="card-sub" id="chartSubAF1">All exercises</div>
+      </div>
+      <div class="chart-box"><canvas id="chartAccF1"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <div class="card-title-icon" style="background:rgba(139,92,246,.1)">
+            <svg fill="none" stroke="#8b5cf6" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          </div>
+          10-Fold CV Mean ± Std
+        </div>
+        <div class="card-sub">Cross-validation distribution</div>
+      </div>
+      <div class="chart-box"><canvas id="chartCV"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Results table -->
+  <div class="card" style="margin-bottom:0">
+    <div class="card-header">
+      <div class="card-title">
+        <div class="card-title-icon" style="background:rgba(6,214,160,.1)">
+          <svg fill="none" stroke="#06d6a0" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18M10 6v12M14 6v12"/></svg>
+        </div>
+        Complete Results Table
+      </div>
+      <div class="card-sub" id="tableCount">— models</div>
+    </div>
+    <div id="tableWrap">
+      <div class="loading-box"><div class="loader"></div><div class="loading-txt">Awaiting connection…</div></div>
+    </div>
+  </div>
+
+</div><!-- /overview -->
+
+<!-- ═══ ANALYSIS ═══ -->
+<div class="page" id="page-analysis">
+  <div class="sec-hd">
+    <div class="sec-title">Analysis</div>
+    <div class="sec-sub">Confusion Matrix · Feature Importance · DL Training Curves</div>
+  </div>
+
+  <div class="err-banner" id="errAnalysis"></div>
+
+  <!-- CM filter -->
+  <div class="filter-bar" style="margin-bottom:20px">
+    <button class="filter-btn active" data-cm-ex="E1">E1 · 12 cls</button>
+    <button class="filter-btn" data-cm-ex="E2">E2 · 17 cls</button>
+    <button class="filter-btn" data-cm-ex="E3">E3 · 23 cls</button>
+  </div>
+
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-header">
+      <div class="card-title">
+        <div class="card-title-icon" style="background:rgba(59,130,246,.1)">
+          <svg fill="none" stroke="#3b82f6" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+        </div>
+        <span id="cmHeading">Confusion Matrix</span>
+      </div>
+      <div class="card-sub">Normalised — diagonal = correct predictions</div>
+    </div>
+    <div class="cm-container" id="cmWrap">
+      <div class="loading-box"><div class="loader"></div><div class="loading-txt">Awaiting connection…</div></div>
+    </div>
+  </div>
+
+  <div class="g2" style="margin-bottom:20px">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <div class="card-title-icon" style="background:rgba(245,158,11,.1)">
+            <svg fill="none" stroke="#f59e0b" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"/></svg>
+          </div>
+          Feature Importance
+        </div>
+        <div class="card-sub">Random Forest · E1 · 12 × 16 = 192 features</div>
+      </div>
+      <div id="fiWrap">
+        <div class="loading-box"><div class="loader"></div><div class="loading-txt">Awaiting connection…</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <div class="card-title-icon" style="background:rgba(6,214,160,.1)">
+            <svg fill="none" stroke="#06d6a0" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+          </div>
+          Cross-Exercise Heatmap
+        </div>
+        <div class="card-sub">Test accuracy · all models × E1/E2/E3</div>
+      </div>
+      <div class="chart-box" id="heatmapBox"><canvas id="chartHeatmap"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Training curves -->
+  <div class="g3">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title" style="font-size:12px">
+          <div class="card-title-icon" style="background:rgba(59,130,246,.1)">
+            <svg fill="none" stroke="#3b82f6" viewBox="0 0 24 24" width="14" height="14"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          </div>CNN Training
+        </div>
+      </div>
+      <div class="chart-box-sm"><canvas id="curveCNN"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title" style="font-size:12px">
+          <div class="card-title-icon" style="background:rgba(139,92,246,.1)">
+            <svg fill="none" stroke="#8b5cf6" viewBox="0 0 24 24" width="14" height="14"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          </div>LSTM Training
+        </div>
+      </div>
+      <div class="chart-box-sm"><canvas id="curveLSTM"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title" style="font-size:12px">
+          <div class="card-title-icon" style="background:rgba(6,214,160,.1)">
+            <svg fill="none" stroke="#06d6a0" viewBox="0 0 24 24" width="14" height="14"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          </div>CNN-LSTM Training
+        </div>
+      </div>
+      <div class="chart-box-sm"><canvas id="curveCNNLSTM"></canvas></div>
+    </div>
+  </div>
+
+</div><!-- /analysis -->
+
+<!-- ═══ PREDICT ═══ -->
+<div class="page" id="page-predict">
+  <div class="sec-hd">
+    <div class="sec-title">Live Prediction</div>
+    <div class="sec-sub">Send an EMG window to your trained model — real-time gesture inference</div>
+  </div>
+
+  <!-- Pipeline strip -->
+  <div class="pipeline">
+    <div class="pip-step hi">📥 EMG Input (200×16)</div>
+    <div class="pip-arr">→</div>
+    <div class="pip-step">Bandpass 20–90Hz</div>
+    <div class="pip-arr">→</div>
+    <div class="pip-step">Feature Extract (192)</div>
+    <div class="pip-arr">→</div>
+    <div class="pip-step">StandardScaler</div>
+    <div class="pip-arr">→</div>
+    <div class="pip-step hi">⚡ Predict Gesture</div>
+  </div>
+
+  <div class="err-banner" id="errPredict"></div>
+
+  <div class="predict-layout">
+    <!-- Input -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <div class="card-title-icon" style="background:rgba(59,130,246,.1)">
+            <svg fill="none" stroke="#3b82f6" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+          </div>
+          EMG Window Input
+        </div>
+      </div>
+
+      <div class="input-label">Exercise Set</div>
+      <div class="filter-bar" style="margin-bottom:16px">
+        <button class="filter-btn active" data-pred-ex="E1">E1</button>
+        <button class="filter-btn" data-pred-ex="E2">E2</button>
+        <button class="filter-btn" data-pred-ex="E3">E3</button>
+      </div>
+
+      <div class="input-label">EMG Data — 200×16 JSON array (leave empty for simulated)</div>
+      <textarea class="emg-ta" id="emgInput" placeholder="// Leave empty → uses simulated EMG burst&#10;//&#10;// Or paste your window:&#10;// [[ch1, ch2, ..., ch16],   ← timestep 1&#10;//  [ch1, ch2, ..., ch16],   ← timestep 2&#10;//  ...                       ← 200 rows total&#10;// ]"></textarea>
+      <button class="btn-predict" id="btnPredict">⚡ Run Prediction</button>
+
+      <div class="api-info" style="margin-top:16px">
+        <div class="input-label" style="margin-bottom:10px">Predict Server (Cell 10.5 · optional)</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:10px;line-height:1.7">
+          Without a server → uses <span style="color:var(--c3)">simulated EMG</span> + probability demo.<br/>
+          With Cell 10.5 running → uses your <span style="color:var(--c1)">real trained SVM + actual inference</span>.
+        </div>
+        <div style="display:flex;gap:8px">
+          <input class="connect-input" id="predictApiUrl" placeholder="https://xxxx.ngrok-free.app (Cell 10.5 URL)" style="font-size:11px"/>
+          <button class="btn-connect" id="btnConnectPredict" style="font-size:12px;padding:8px 14px;white-space:nowrap">Set</button>
+        </div>
+        <div style="margin-top:8px;font-family:var(--mono);font-size:9px;color:var(--text3)">
+          POST /api/predict · {"emg_data":[[...]],"exercise":"E1"}
+        </div>
+      </div>
+    </div>
+
+    <!-- Result -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <div class="card-title-icon" style="background:rgba(6,214,160,.1)">
+            <svg fill="none" stroke="#06d6a0" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          </div>
+          Prediction Result
+        </div>
+        <div id="predictMode" class="card-sub" style="color:var(--c4)">demo mode</div>
+      </div>
+      <div class="result-box" id="resultBox">
+        <div class="result-idle">
+          <div class="result-idle-icon">🤚</div>
+          <div>Hit Run Prediction →</div>
+          <div style="font-size:10px;color:var(--text3);margin-top:6px">Simulated until predict server is set</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div><!-- /predict -->
+
+<!-- ═══ NOTEBOOK ═══ -->
+<div class="page" id="page-notebook">
+  <div class="sec-hd">
+    <div class="sec-title">Notebook</div>
+    <div class="sec-sub">NinaPro_DB5_M_tech.ipynb — loaded from emg_export.json</div>
+  </div>
+  <div class="err-banner" id="errNotebook"></div>
+  <div class="nb-cells" id="nbWrap">
+    <div class="loading-box"><div class="loader"></div><div class="loading-txt">Awaiting connection…</div></div>
+  </div>
+</div>
+
+</main>
+</div><!-- /shell -->
+
+<script>
+// ════════════════════════════════════════════════
+//  HERO WAVE ANIMATION
+// ════════════════════════════════════════════════
+(function(){
+  const canvas = document.getElementById('heroWave');
+  if(!canvas) return;
+  const ctx = canvas.getContext('2d');
+  canvas.width = 260; canvas.height = 80;
+  let t = 0;
+  function draw(){
+    ctx.clearRect(0,0,260,80);
+    ctx.strokeStyle='rgba(59,130,246,0.7)';ctx.lineWidth=1.5;
+    ctx.shadowBlur=8;ctx.shadowColor='#3b82f6';
+    ctx.beginPath();
+    for(let x=0;x<260;x++){
+      const p=x/260;
+      const y=40+Math.sin(p*8+t)*12+Math.sin(p*3+t*.7)*7+Math.sin(p*18+t*1.3)*(p>.3&&p<.7?6:1);
+      x===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+    ctx.strokeStyle='rgba(139,92,246,0.35)';ctx.shadowColor='#8b5cf6';
+    ctx.beginPath();
+    for(let x=0;x<260;x++){
+      const p=x/260;
+      const y=40+Math.sin(p*6+t*1.2+1)*9+Math.sin(p*12+t*.9)*4;
+      x===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+    t+=0.025; requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+// ════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════
+let data = null;          // loaded from emg_export.json
+let PREDICT_API = '';     // optional Cell-10.5 URL (predict only)
+let charts = {};
+let currentEx = 'All', currentCMEx = 'E1', currentPredEx = 'E1';
+
+const GESTURE_ICONS = {
+  1:'☝️',2:'✌️',3:'🤟',4:'🖖',5:'🤙',6:'👍',
+  7:'✊',8:'🖐️',9:'🤌',10:'💎',11:'👏',12:'🤜',
+  13:'🫳',14:'✋',15:'🤚',16:'🙌',17:'🫴',
+};
+const FI_COLORS = [
+  'linear-gradient(90deg,#3b82f6,#8b5cf6)','linear-gradient(90deg,#8b5cf6,#ec4899)',
+  'linear-gradient(90deg,#06d6a0,#3b82f6)','linear-gradient(90deg,#f59e0b,#ef4444)',
+  'linear-gradient(90deg,#ec4899,#8b5cf6)','linear-gradient(90deg,#3b82f6,#06d6a0)',
+  'linear-gradient(90deg,#f59e0b,#3b82f6)','linear-gradient(90deg,#06d6a0,#8b5cf6)',
+  'linear-gradient(90deg,#ef4444,#f59e0b)','linear-gradient(90deg,#8b5cf6,#3b82f6)',
+  'linear-gradient(90deg,#3b82f6,#ec4899)','linear-gradient(90deg,#06d6a0,#f59e0b)',
+];
+
+// ════════════════════════════════════════════════
+//  NAVIGATION
+// ════════════════════════════════════════════════
+document.querySelectorAll('.nav-item').forEach(el=>{
+  el.addEventListener('click',()=>{
+    document.querySelectorAll('.nav-item').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('page-'+el.dataset.page).classList.add('active');
+    document.getElementById('crumb').innerHTML=`<span>${el.textContent.trim()}</span>`;
+  });
+});
+
+// ════════════════════════════════════════════════
+//  FILTERS
+// ════════════════════════════════════════════════
+document.querySelectorAll('.filter-btn[data-ex]').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.filter-btn[data-ex]').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active'); currentEx=btn.dataset.ex;
+    if(data){renderCharts();renderTable();}
+  });
+});
+document.querySelectorAll('.filter-btn[data-cm-ex]').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.filter-btn[data-cm-ex]').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active'); currentCMEx=btn.dataset.cmEx;
+    if(data) renderCM();
+  });
+});
+document.querySelectorAll('.filter-btn[data-pred-ex]').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.filter-btn[data-pred-ex]').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active'); currentPredEx=btn.dataset.predEx;
+  });
+});
+
+// ════════════════════════════════════════════════
+//  FILE LOADER — primary data source
+// ════════════════════════════════════════════════
+document.getElementById('fileInput').addEventListener('change', e=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  document.getElementById('btnLoadFile').textContent = '⏳ Loading…';
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      data = JSON.parse(ev.target.result);
+      onDataLoaded(file.name);
+    } catch(err) {
+      showErr('errOverview','Failed to parse JSON: '+err.message);
+      document.getElementById('btnLoadFile').textContent = '📂 Choose emg_export.json';
+    }
+  };
+  reader.readAsText(file);
+});
+
+function onDataLoaded(filename){
+  document.getElementById('btnLoadFile').textContent = '✓ '+filename;
+  document.getElementById('btnLoadFile').style.background = 'linear-gradient(135deg,#06d6a0,#3b82f6)';
+  setStatus('live','Loaded · '+filename);
+  renderStats();
+  renderCharts();
+  renderTable();
+  renderCM();
+  renderFI();
+  renderTrainingCurves();
+  renderHeatmap();
+  renderNotebook(data.notebook_cells || []);
+}
+
+function setStatus(state,txt){
+  document.getElementById('statusDot').className='status-dot'+(state?' '+state:'');
+  document.getElementById('statusText').textContent=txt;
+}
+function showErr(id,msg){
+  const el=document.getElementById(id);
+  el.textContent='⚠ '+msg; el.style.display='block';
+}
+
+// ════════════════════════════════════════════════
+//  OPTIONAL ngrok connect (legacy overview load)
+// ════════════════════════════════════════════════
+document.getElementById('btnConnect').addEventListener('click', async()=>{
+  const url = document.getElementById('apiUrlInput').value.trim().replace(/\/+$/,'');
+  if(!url){ alert('Enter ngrok URL'); return; }
+  document.getElementById('btnConnect').textContent='Connecting…';
+  try {
+    const h = await apiFetch(url+'/api/health');
+    const m = await apiFetch(url+'/api/metrics');
+    data = m; // metrics shape matches export shape
+    // also pull notebook cells
+    try { const nb = await apiFetch(url+'/api/notebook_cells'); data.notebook_cells = nb.cells||[]; } catch(e){}
+    onDataLoaded('Flask API');
+    document.getElementById('btnConnect').textContent='✓ Connected';
+  } catch(e){
+    showErr('errOverview','Cannot reach server: '+e.message);
+    document.getElementById('btnConnect').textContent='Retry';
+  }
+});
+
+async function apiFetch(url){
+  const r = await fetch(url,{headers:{'ngrok-skip-browser-warning':'1'}});
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  return r.json();
+}
+
+// ════════════════════════════════════════════════
+//  PREDICT SERVER (Cell 10.5 only)
+// ════════════════════════════════════════════════
+document.getElementById('btnConnectPredict').addEventListener('click', async()=>{
+  const url = document.getElementById('predictApiUrl').value.trim().replace(/\/+$/,'');
+  if(!url) return;
+  try {
+    await apiFetch(url+'/api/health');
+    PREDICT_API = url;
+    document.getElementById('predictMode').textContent='real inference · SVM';
+    document.getElementById('predictMode').style.color='var(--c3)';
+  } catch(e){
+    showErr('errPredict','Cannot reach predict server: '+e.message);
+  }
+});
+
+// ════════════════════════════════════════════════
+//  CHART.JS DEFAULTS
+// ════════════════════════════════════════════════
+const CD = {
+  animation:false, responsive:true, maintainAspectRatio:false,
+  plugins:{
+    legend:{labels:{color:'#7e8fb5',font:{family:'JetBrains Mono',size:10},boxWidth:10,padding:16}},
+    tooltip:{backgroundColor:'#0c1020',borderColor:'rgba(255,255,255,.1)',borderWidth:1,
+             titleColor:'#7e8fb5',bodyColor:'#f0f4ff',padding:12,
+             titleFont:{family:'JetBrains Mono',size:10},bodyFont:{family:'JetBrains Mono',size:11}}
+  },
+  scales:{
+    x:{ticks:{color:'#3a4566',font:{family:'JetBrains Mono',size:9},maxRotation:35},grid:{color:'rgba(255,255,255,.03)'}},
+    y:{ticks:{color:'#3a4566',font:{family:'JetBrains Mono',size:9}},grid:{color:'rgba(255,255,255,.03)'},min:0,max:1.05}
+  }
+};
+
+// ════════════════════════════════════════════════
+//  STATS
+// ════════════════════════════════════════════════
+function renderStats(){
+  const m=data.models;
+  const best=m.reduce((a,b)=>a.accuracy>b.accuracy?a:b);
+  const bestF1=m.reduce((a,b)=>a.f1>b.f1?a:b);
+  const bestDL=m.filter(x=>x.type==='deep_learning').reduce((a,b)=>a.accuracy>b.accuracy?a:b,m.find(x=>x.type==='deep_learning')||m[0]);
+  const bestML=m.filter(x=>x.type==='classical').reduce((a,b)=>a.accuracy>b.accuracy?a:b,m.find(x=>x.type==='classical')||m[0]);
+  set('sc1Val',(best.accuracy*100).toFixed(1)+'%'); set('sc1Sub',best.name+' · '+best.exercise);
+  set('sc2Val',(bestF1.f1*100).toFixed(1)+'%');    set('sc2Sub',bestF1.name+' · '+bestF1.exercise);
+  set('sc3Val',(bestDL.accuracy*100).toFixed(1)+'%'); set('sc3Sub',bestDL.name+' · '+bestDL.exercise);
+  set('sc4Val',(bestML.accuracy*100).toFixed(1)+'%'); set('sc4Sub',bestML.name+' · '+bestML.exercise);
+}
+function set(id,v){document.getElementById(id).textContent=v;}
+
+// ════════════════════════════════════════════════
+//  CHARTS
+// ════════════════════════════════════════════════
+function renderCharts(){
+  const models=data.models.filter(m=>currentEx==='All'||m.exercise===currentEx);
+  const labels=models.map(m=>m.name+(currentEx==='All'?'\n'+m.exercise:''));
+  set('chartSubAF1',currentEx==='All'?'All exercises':currentEx+' only');
+  set('tableCount',models.length+' models');
+
+  if(charts.af1) charts.af1.destroy();
+  charts.af1=new Chart(document.getElementById('chartAccF1'),{
+    type:'bar',
+    data:{labels,datasets:[
+      {label:'Accuracy',data:models.map(m=>m.accuracy),
+       backgroundColor:models.map(m=>m.type==='deep_learning'?'rgba(59,130,246,.75)':'rgba(139,92,246,.75)'),
+       borderRadius:5,barPercentage:.42},
+      {label:'F1 Score',data:models.map(m=>m.f1),
+       backgroundColor:models.map(m=>m.type==='deep_learning'?'rgba(6,214,160,.65)':'rgba(245,158,11,.65)'),
+       borderRadius:5,barPercentage:.42},
+    ]},
+    options:{...CD,scales:{...CD.scales,y:{...CD.scales.y,min:0,max:1.15}}}
+  });
+
+  if(charts.cv) charts.cv.destroy();
+  charts.cv=new Chart(document.getElementById('chartCV'),{
+    type:'bar',
+    data:{labels,datasets:[{
+      label:'CV Mean',data:models.map(m=>m.cv_mean),
+      backgroundColor:models.map(m=>m.type==='deep_learning'?'rgba(59,130,246,.75)':'rgba(139,92,246,.75)'),
+      borderRadius:5,barPercentage:.55,
+    }]},
+    options:{...CD,plugins:{...CD.plugins,tooltip:{...CD.plugins.tooltip,
+      callbacks:{afterLabel:ctx=>`±${(models[ctx.dataIndex].cv_std*100).toFixed(2)}%`}
+    }}}
+  });
+}
+
+// ════════════════════════════════════════════════
+//  TABLE
+// ════════════════════════════════════════════════
+function renderTable(){
+  const models=data.models.filter(m=>currentEx==='All'||m.exercise===currentEx);
+  const maxAcc=Math.max(...models.map(m=>m.accuracy));
+  let h=`<table class="data-table"><thead><tr>
+    <th>Model</th><th>Type</th><th>Exercise</th>
+    <th>Accuracy</th><th>F1</th><th>Precision</th><th>Recall</th>
+    <th>CV Mean</th><th>±Std</th><th>Time</th>
+  </tr></thead><tbody>`;
+  models.forEach(m=>{
+    const best=m.accuracy===maxAcc;
+    h+=`<tr class="${best?'best-row':''}">
+      <td style="font-weight:600">${m.name}${best?'<span class="best-badge">BEST</span>':''}</td>
+      <td><span class="type-pill ${m.type==='deep_learning'?'type-dl':'type-ml'}">${m.type==='deep_learning'?'DL':'ML'}</span></td>
+      <td class="td-mono">${m.exercise}</td>
+      <td><div class="acc-bar-wrap">
+        <div class="acc-track"><div class="acc-fill" style="width:${(m.accuracy*100).toFixed(1)}%"></div></div>
+        <span class="acc-num">${(m.accuracy*100).toFixed(2)}%</span>
+      </div></td>
+      <td class="td-mono">${(m.f1*100).toFixed(2)}%</td>
+      <td class="td-mono">${(m.precision*100).toFixed(2)}%</td>
+      <td class="td-mono">${(m.recall*100).toFixed(2)}%</td>
+      <td class="td-mono">${(m.cv_mean*100).toFixed(2)}%</td>
+      <td class="td-mono" style="color:var(--text3)">±${(m.cv_std*100).toFixed(2)}%</td>
+      <td class="td-mono" style="color:var(--text3)">${m.train_time_s}s</td>
+    </tr>`;
+  });
+  h+='</tbody></table>';
+  document.getElementById('tableWrap').innerHTML=h;
+}
+
+// ════════════════════════════════════════════════
+//  CONFUSION MATRIX
+// ════════════════════════════════════════════════
+function renderCM(){
+  const d=data.confusion_matrices[currentCMEx];
+  if(!d){document.getElementById('cmWrap').innerHTML='<div class="loading-box"><div class="loading-txt">No CM for '+currentCMEx+'</div></div>';return;}
+  const{labels,matrix,best_model}=d;
+  document.getElementById('cmHeading').textContent=`Confusion Matrix — ${best_model} (${currentCMEx})`;
+  const maxV=Math.max(...matrix.flat());
+  let h='<table class="cm-table"><thead><tr><th></th>';
+  labels.forEach(l=>h+=`<th style="font-size:9px;color:var(--c1);max-width:44px">${l}</th>`);
+  h+='</tr></thead><tbody>';
+  matrix.forEach((row,ri)=>{
+    h+=`<tr><td class="cm-row-label">${labels[ri]}</td>`;
+    row.forEach((v,ci)=>{
+      const t=v/maxV;
+      let bg,fg;
+      if(ri===ci){bg=`rgba(6,214,160,${Math.min(.85,t*.8+.15).toFixed(2)})`;fg=t>.4?'#000':'#06d6a0';}
+      else{bg=t<.01?'rgba(255,255,255,.02)':`rgba(59,130,246,${(t*.5+.04).toFixed(2)})`;fg=t>.5?'#fff':'var(--text2)';}
+      h+=`<td><div class="cm-cell" style="background:${bg};color:${fg};font-weight:${ri===ci?700:400};border:${ri===ci?'1px solid rgba(6,214,160,.3)':'none'}">${v}</div></td>`;
+    });
+    h+='</tr>';
+  });
+  h+='</tbody></table>';
+  document.getElementById('cmWrap').innerHTML=h;
+}
+
+// ════════════════════════════════════════════════
+//  FEATURE IMPORTANCE
+// ════════════════════════════════════════════════
+function renderFI(){
+  const fi=data.feature_importance;
+  const total=fi.reduce((s,f)=>s+f.importance,0);
+  const maxI=fi[0].importance;
+  let h='';
+  fi.forEach((f,i)=>{
+    const pct=(f.importance/total*100).toFixed(1);
+    const w=(f.importance/maxI*100).toFixed(1);
+    h+=`<div class="fi-item">
+      <div class="fi-rank">${String(i+1).padStart(2,'0')}</div>
+      <div class="fi-name">${f.feature}</div>
+      <div class="fi-track"><div class="fi-fill" style="width:${w}%;background:${FI_COLORS[i%FI_COLORS.length]}"></div></div>
+      <div class="fi-pct">${pct}%</div>
+    </div>`;
+  });
+  document.getElementById('fiWrap').innerHTML=h;
+}
+
+// ════════════════════════════════════════════════
+//  CROSS-EXERCISE HEATMAP
+// ════════════════════════════════════════════════
+function renderHeatmap(){
+  const ORDER=['SVM','Random Forest','KNN','LDA','CNN','LSTM','CNN-LSTM'];
+  const acc={};
+  data.models.forEach(m=>{if(!acc[m.exercise])acc[m.exercise]={};acc[m.exercise][m.name]=m.accuracy;});
+  const datasets=['E1','E2','E3'].map((ex,i)=>({
+    label:ex,
+    data:ORDER.map(mn=>(acc[ex]&&acc[ex][mn]?acc[ex][mn]*100:0)),
+    backgroundColor:['rgba(59,130,246,.75)','rgba(139,92,246,.75)','rgba(6,214,160,.75)'][i],
+    borderRadius:4,barPercentage:.3,
+  }));
+  if(charts.hm) charts.hm.destroy();
+  charts.hm=new Chart(document.getElementById('chartHeatmap'),{
+    type:'bar',data:{labels:ORDER,datasets},
+    options:{...CD,scales:{
+      x:{...CD.scales.x,ticks:{...CD.scales.x.ticks,maxRotation:30}},
+      y:{...CD.scales.y,min:0,max:110,ticks:{...CD.scales.y.ticks,callback:v=>v+'%'}}
+    }}
+  });
+}
+
+// ════════════════════════════════════════════════
+//  TRAINING CURVES
+// ════════════════════════════════════════════════
+function renderTrainingCurves(){
+  const tc=data.training_curves;
+  const mk=(tr,vl,c1,c2)=>({
+    type:'line',
+    data:{labels:tc.epochs,datasets:[
+      {label:'Train',data:tr,borderColor:c1,borderWidth:1.5,pointRadius:0,tension:.35},
+      {label:'Val',  data:vl,borderColor:c2,borderWidth:1.5,pointRadius:0,tension:.35,borderDash:[5,4]},
+    ]},
+    options:{animation:false,responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{labels:{color:'#7e8fb5',font:{family:'JetBrains Mono',size:9},boxWidth:8,padding:10}},
+               tooltip:{...CD.plugins.tooltip}},
+      scales:{
+        x:{ticks:{color:'#3a4566',font:{family:'JetBrains Mono',size:8}},grid:{color:'rgba(255,255,255,.03)'},
+           title:{display:true,text:'Epoch',color:'#3a4566',font:{size:8}}},
+        y:{ticks:{color:'#3a4566',font:{family:'JetBrains Mono',size:8},callback:v=>(v*100).toFixed(0)+'%'},
+           grid:{color:'rgba(255,255,255,.03)'},min:0,max:1}
+      }
+    }
+  });
+  if(charts.cnn) charts.cnn.destroy();
+  if(charts.lstm) charts.lstm.destroy();
+  if(charts.cnnl) charts.cnnl.destroy();
+  charts.cnn  = new Chart(document.getElementById('curveCNN'),   mk(tc.cnn_train_acc,tc.cnn_val_acc,'#3b82f6','rgba(59,130,246,.4)'));
+  charts.lstm = new Chart(document.getElementById('curveLSTM'),  mk(tc.lstm_train_acc,tc.lstm_val_acc,'#8b5cf6','rgba(139,92,246,.4)'));
+  charts.cnnl = new Chart(document.getElementById('curveCNNLSTM'),mk(tc.cnn_lstm_train_acc,tc.cnn_lstm_val_acc,'#06d6a0','rgba(6,214,160,.4)'));
+}
+
+// ════════════════════════════════════════════════
+//  PREDICT — simulated OR real server
+// ════════════════════════════════════════════════
+document.getElementById('btnPredict').addEventListener('click', async()=>{
+  const raw=document.getElementById('emgInput').value.trim();
+  let emgData=null;
+  document.getElementById('errPredict').style.display='none';
+
+  if(raw){
+    try{emgData=JSON.parse(raw);}
+    catch(e){showErr('errPredict','Invalid JSON: '+e.message);return;}
+    if(!Array.isArray(emgData)||!Array.isArray(emgData[0])){showErr('errPredict','Need 2D array [[ch1..ch16],...]');return;}
+  }
+
+  document.getElementById('resultBox').innerHTML='<div class="loading-box"><div class="loader"></div><div class="loading-txt">Running inference…</div></div>';
+
+  try {
+    let res;
+    if(PREDICT_API){
+      // Real server (Cell 10.5) — actual trained SVM predict_proba
+      const r=await fetch(PREDICT_API+'/api/predict',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','ngrok-skip-browser-warning':'1'},
+        body:JSON.stringify({emg_data:emgData,exercise:currentPredEx})
+      });
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      res=await r.json();
+    } else {
+      // No server — simulate from export data
+      res=simulatePredict(currentPredEx);
+    }
+    showResult(res);
+  } catch(e){
+    showErr('errPredict','Prediction failed: '+e.message);
+    document.getElementById('resultBox').innerHTML='<div class="result-idle"><div class="result-idle-icon">⚠️</div><div style="color:var(--c5)">Failed</div></div>';
+  }
+});
+
+function simulatePredict(exercise){
+  // Uses gesture names from export, realistic softmax distribution
+  const meta = data?.predict_meta?.[exercise];
+  const names = meta ? meta.class_names : ['Fist','Open Hand','Index Flex','Thumb','Rest'];
+  const n = names.length;
+
+  // Generate believable softmax output
+  const logits = Array.from({length:n},()=>Math.random()*2-1);
+  const winner = Math.floor(Math.random()*n);
+  logits[winner] += 3.0;
+  const exps = logits.map(x=>Math.exp(x));
+  const sum = exps.reduce((a,b)=>a+b,0);
+  const probs = exps.map(x=>x/sum);
+
+  const probs_obj = {};
+  names.forEach((n,i)=>probs_obj[n]=probs[i]);
+
+  return {
+    gesture:       names[winner],
+    gesture_index: meta ? meta.class_ids[winner] : winner+1,
+    confidence:    probs[winner],
+    exercise,
+    probabilities: probs_obj,
+    _simulated:    true,
+  };
+}
+
+function showResult(res){
+  const c=res.confidence;
+  const cls=c>.7?'cb-high':c>.4?'cb-mid':'cb-low';
+  const lbl=c>.7?'HIGH CONFIDENCE':c>.4?'MODERATE':'LOW CONFIDENCE';
+  const icon=GESTURE_ICONS[res.gesture_index]||'✋';
+  const top6=Object.entries(res.probabilities).sort((a,b)=>b[1]-a[1]).slice(0,6);
+
+  let pH='<div class="prob-grid">';
+  top6.forEach(([name,p])=>{
+    const isTop=name===res.gesture;
+    pH+=`<div class="prob-row">
+      <div class="prob-name" style="${isTop?'color:var(--c1);font-weight:600':''}">${name}</div>
+      <div class="prob-track"><div class="prob-fill" style="width:${(p*100).toFixed(1)}%;background:${isTop?'linear-gradient(90deg,var(--c1),var(--c2))':'rgba(255,255,255,.1)'}"></div></div>
+      <div class="prob-pct">${(p*100).toFixed(1)}%</div>
+    </div>`;
+  });
+  pH+='</div>';
+  if(res._simulated) pH+='<div style="margin-top:10px;font-family:var(--mono);font-size:9px;color:var(--text3);text-align:center">⚡ simulated — connect Cell 10.5 for real inference</div>';
+
+  document.getElementById('resultBox').innerHTML=`
+    <div class="result-glow"></div>
+    <div class="result-gesture-wrap" style="width:100%">
+      <div class="result-icon">${icon}</div>
+      <div class="result-name">${res.gesture}</div>
+      <div class="result-conf">${(c*100).toFixed(1)}% confidence</div>
+      <div class="conf-badge ${cls}">${lbl}</div>
+      ${pH}
+    </div>`;
+}
+
+// ════════════════════════════════════════════════
+//  NOTEBOOK
+// ════════════════════════════════════════════════
+function renderNotebook(cells){
+  if(!cells||!cells.length){
+    document.getElementById('nbWrap').innerHTML='<div class="loading-box"><div class="loading-txt">No notebook cells in export. Run Cell 10.2 with the .ipynb in /content/.</div></div>';
+    return;
+  }
+  let h='';let ci=0;
+  cells.forEach(cell=>{
+    if(cell.type==='markdown'){
+      h+=`<div class="nb-cell nb-md-cell">${mdHTML(cell.source)}</div>`;
+    } else if(cell.type==='code'){
+      ci++;
+      const hasOut=cell.outputs&&cell.outputs.some(o=>o.text&&o.text.trim());
+      h+=`<div class="nb-cell">
+        <div class="nb-code-header" onclick="toggleNb(this)">
+          <div class="nb-in-label">
+            <span class="in-num">In [${ci}]</span>
+            <span style="color:var(--text3);font-size:10px">${esc(cell.source.split('\n')[0]).slice(0,55)+(cell.source.length>55?'…':'')}</span>
+          </div>
+          <span class="nb-toggle">▼</span>
+        </div>
+        <pre class="nb-code">${syntaxHL(esc(cell.source))}</pre>
+        ${hasOut?`<div class="nb-output">${cell.outputs.map(o=>esc(o.text||'')).join('\n')}</div>`:''}
+      </div>`;
+    }
+  });
+  document.getElementById('nbWrap').innerHTML=h||'<div class="loading-box"><div class="loading-txt">No cells</div></div>';
+}
+
+function toggleNb(hdr){
+  const cell=hdr.parentElement;
+  const pre=cell.querySelector('.nb-code');
+  const out=cell.querySelector('.nb-output');
+  const tog=hdr.querySelector('.nb-toggle');
+  const hidden=pre.style.display==='none';
+  if(pre) pre.style.display=hidden?'':'none';
+  if(out) out.style.display=hidden?'':'none';
+  tog.textContent=hidden?'▼':'▶';
+}
+
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+
+function mdHTML(s){
+  return s
+    .replace(/^### (.+)$/gm,'<h3>$1</h3>')
+    .replace(/^## (.+)$/gm,'<h2>$1</h2>')
+    .replace(/^# (.+)$/gm,'<h1>$1</h1>')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/`([^`]+)`/g,'<code>$1</code>')
+    .replace(/^---+$/gm,'<hr/>')
+    .replace(/^\|(.+)\|$/gm,(m,p)=>{
+      const cls=p.trim().replace(/^[-| ]+$/,'');
+      if(cls) return m;
+      return `<tr>${p.split('|').map(c=>`<td>${c.trim()}</td>`).join('')}</tr>`;
+    })
+    .replace(/(<tr>[\s\S]*?<\/tr>)/g,'<table>$1</table>')
+    .replace(/\n/g,'<br/>');
+}
+
+function syntaxHL(c){
+  return c
+    .replace(/(#[^\n&<>]*)/g,'<span class="cm">$1</span>')
+    .replace(/\b(def|class|import|from|return|for|in|if|else|elif|while|try|except|with|as|not|and|or|True|False|None|lambda|yield|pass|break|continue|global|assert|raise)\b/g,'<span class="kw">$1</span>')
+    .replace(/\b([A-Z][A-Z0-9_]{2,})\b/g,'<span class="cl">$1</span>')
+    .replace(/'([^'\\n]*)'/g,"<span class='str'>'$1'</span>")
+    .replace(/&quot;([^&]*)&quot;/g,"<span class='str'>&quot;$1&quot;</span>")
+    .replace(/\b(\d+\.?\d*)\b/g,'<span class="nm">$1</span>')
+    .replace(/\b(np|pd|plt|sns|tf|keras|layers|SVC|RandomForestClassifier|KNeighborsClassifier|LinearDiscriminantAnalysis|StandardScaler|LabelEncoder|StratifiedKFold|cross_val_score|train_test_split|accuracy_score|f1_score|confusion_matrix|to_categorical|butter|filtfilt|stats|print|len|range|zip|enumerate|list|dict|str|int|float|bool|min|max|sum|abs|sorted)\b/g,'<span class="fn">$1</span>');
+}
+</script>
+</body>
+</html>
